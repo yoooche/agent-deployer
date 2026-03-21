@@ -1,0 +1,6 @@
+project_id      = "your-gcp-project-id"
+region          = "asia-east1"
+zone            = "asia-east1-b"
+vm_name         = "openclaw-vm"
+vm_machine_type = "e2-micro"
+registry_id     = "openclaw-registry"

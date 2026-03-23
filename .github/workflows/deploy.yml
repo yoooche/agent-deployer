@@ -3,6 +3,7 @@ name: OpenClaw Deployment
 on:
   push:
     branches: [release/*]
+  workflow_dispatch:
 
 env:
   TF_VAR_project_id: ${{ vars.GCP_PROJECT_ID }}

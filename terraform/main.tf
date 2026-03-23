@@ -5,6 +5,11 @@ terraform {
         version = "~> 5.0"
     }
   }
+
+  backend "gcs" {
+    bucket = "openclaw-tfstate"
+    prefix = "terraform/state"
+  }
 }
 
 provider "google" {
@@ -40,6 +45,7 @@ resource "google_compute_instance" "vm" {
   boot_disk {
     initialize_params {
       image = "debian-cloud/debian-12"
+      size = 20
     }
   }
 
@@ -53,13 +59,24 @@ resource "google_compute_instance" "vm" {
     scopes = ["cloud-platform"]
   }
 
+  metadata = {
+    ssh-keys = "louis-agent:${var.ssh_pub_key}"
+  }
+
   # Install Docker and start it when the VM is created
-  metadata_startup_script = <<-EOF
+  metadata_startup_script = <<-EOT
     apt-get update -y
-    apt-get install -y docker.io
+    apt-get install -y docker.io curl gnupg
     systemctl start docker
     systemctl enable docker
-  EOF
+    usermod -aG docker louis-agent || true
+    curl https://packages.cloud.google.com/apt/doc/apt-key.gpg \
+      | gpg --dearmor -o /usr/share/keyrings/cloud.google.gpg
+    echo "deb [signed-by=/usr/share/keyrings/cloud.google.gpg] \
+      https://packages.cloud.google.com/apt cloud-sdk main" \
+      | tee /etc/apt/sources.list.d/google-cloud-sdk.list
+    apt-get update -y && apt-get install -y google-cloud-sdk
+  EOT
 
   allow_stopping_for_update = true
 }

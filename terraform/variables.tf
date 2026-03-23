@@ -33,3 +33,8 @@ variable "artifact_name" {
   type = string
   default = "openclaw-artifact-registry"
 }
+
+variable "ssh_pub_key" {
+  description = "SSH Public Key for VM access"
+  type = string
+}

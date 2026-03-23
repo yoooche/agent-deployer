@@ -1,0 +1,115 @@
+name: OpenClaw Deployment
+
+on:
+  push:
+    branches: [release/*]
+
+env:
+  TF_VAR_project_id: ${{ vars.GCP_PROJECT_ID }}
+  TF_VAR_region: ${{ vars.GCP_REGION }}
+  TF_VAR_zone: ${{ vars.GCP_ZONE }}
+  TF_VAR_vm_name: ${{ vars.VM_NAME }}
+  TF_VAR_vm_machine_type: ${{ vars.VM_MACHINE_TYPE }}
+  TF_VAR_artifact_name: ${{ vars.ARTIFACT_NAME }}
+  TF_VAR_ssh_pub_key: ${{ secrets.SSH_PUB_KEY }}
+
+jobs:
+  # job 1: Terraform
+  terraform:
+    runs-on: ubuntu-latest
+    outputs:
+      vm_external_ip: ${{ steps.outputs.outputs.vm_external_ip }}
+      artifact_registry_url: ${{ steps.outputs.outputs.artifact_registry_url }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - uses: hashicorp/setup-terraform@v4
+        with: 
+          terraform_wrapper: false
+
+      - name: Terraform init
+        run: terraform init
+        working-directory: terraform
+
+      - name: Terraform Apply
+        run: terraform apply -auto-approve
+        working-directory: terraform
+
+      - name: Get Outputs
+        id: outputs
+        run: |
+          echo "vm_external_ip=$(terraform output -raw vm_external_ip)" >> $GITHUB_OUTPUT
+          echo "artifact_registry_url=$(terraform output -raw artifact_registry_url)" >> $GITHUB_OUTPUT
+        working-directory: terraform
+
+  # job 2: Build and push Docker image
+  build-push-image:
+    needs: terraform
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - uses: google-github-actions/setup-gcloud@v2
+
+      - name: Configure Docker for Artifact Registry
+        run: gcloud auth configure-docker ${{ vars.GCP_REGION }}-docker.pkg.dev --quiet
+
+      - name: Build Image
+        run: |
+          docker build \
+            -t ${{ needs.terraform.outputs.artifact_registry_url }}/openclaw:latest \
+            -t ${{ needs.terraform.outputs.artifact_registry_url }}/openclaw:${{ github.sha }} \
+            ./docker
+
+      - name: Push Image
+        run: |
+          docker push ${{ needs.terraform.outputs.artifact_registry_url }}/openclaw:latest
+          docker push ${{ needs.terraform.outputs.artifact_registry_url }}/openclaw:${{ github.sha }}
+
+  # job 3: Deploy to VM
+  deploy-to-vm:
+    needs: [terraform, build-push-image]
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -H ${{ needs.terraform.outputs.vm_external_ip }} >> ~/.ssh/known_hosts
+
+      - name: Copy docker-compose.yml to VM
+        run: |
+          scp ./docker/docker-compose.yml \
+            louis-agent@${{ needs.terraform.outputs.vm_external_ip }}:~/docker-compose.yml
+
+      - name: Deploy
+        env: 
+          VM_IP: ${{ needs.terraform.outputs.vm_external_ip }}
+          REGISTRY_URL: ${{ needs.terraform.outputs.artifact_registry_url }}
+          OPENCLAW_GATEWAY_TOKEN: ${{ secrets.OPENCLAW_GATEWAY_TOKEN }}
+          GCP_REGION: ${{ vars.GCP_REGION }}
+        run: |
+          ssh louis-agent@$VM_IP << EOF
+            set -e
+            mkdir -p ~/.openclaw ~/.openclaw/workspace
+            gcloud auth configure-docker $GCP_REGION-docker.pkg.dev --quiet
+            docker pull $REGISTRY_URL/openclaw:latest
+            export OPENCLAW_IMAGE=$REGISTRY_URL/openclaw:latest
+            export OPENCLAW_GATEWAY_TOKEN=$OPENCLAW_GATEWAY_TOKEN
+            export OPENCLAW_GATEWAY_BIND=lan
+            docker compose -f ~/docker-compose.yml up -d --force-recreate
+          EOF

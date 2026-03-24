@@ -67,7 +67,7 @@ resource "google_compute_instance" "vm" {
   # Install Docker and start it when the VM is created
   metadata_startup_script = <<-EOT
     apt-get update -y
-    apt-get install -y docker.io docker-compose-plugin curl gnupg
+    apt-get install -y docker.io curl gnupg
     systemctl start docker
     systemctl enable docker
     usermod -aG docker louis-agent || true

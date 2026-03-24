@@ -7,7 +7,8 @@ terraform {
   }
 
   backend "gcs" {
-    bucket = "openclaw-tfstate"
+    # Bucket name passed at init: -backend-config="bucket=${project_id}-tfstate"
+    # Must match the bucket created by bootstrap
     prefix = "terraform/state"
   }
 }

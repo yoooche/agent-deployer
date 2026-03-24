@@ -34,7 +34,7 @@ jobs:
           terraform_wrapper: false
 
       - name: Terraform init
-        run: terraform init
+        run: terraform init -backend-config="bucket=${{ vars.GCP_PROJECT_ID }}-tfstate"
         working-directory: terraform
 
       - name: Terraform Apply

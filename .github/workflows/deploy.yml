@@ -105,12 +105,13 @@ jobs:
           GCP_REGION: ${{ vars.GCP_REGION }}
         run: |
           ssh louis-agent@$VM_IP "set -e
-            export PATH=/usr/local/bin:/usr/bin:/bin:/snap/bin
+            sudo apt-get update -qq && sudo apt-get install -y docker.io docker-compose-plugin
+            sudo usermod -aG docker louis-agent 2>/dev/null || true
             mkdir -p ~/.openclaw ~/.openclaw/workspace
-            sudo apt-get update -qq && sudo apt-get install -y -qq docker-compose-plugin 2>/dev/null || true
             gcloud auth configure-docker $GCP_REGION-docker.pkg.dev --quiet
-            /usr/bin/docker pull $REGISTRY_URL/openclaw:latest
+            DOCKER=\$(which docker || echo /usr/bin/docker)
+            \$DOCKER pull $REGISTRY_URL/openclaw:latest
             export OPENCLAW_IMAGE=$REGISTRY_URL/openclaw:latest
             export OPENCLAW_GATEWAY_TOKEN=$OPENCLAW_GATEWAY_TOKEN
             export OPENCLAW_GATEWAY_BIND=lan
-            /usr/bin/docker compose -f ~/docker-compose.yml up -d --force-recreate"
+            \$DOCKER compose -f ~/docker-compose.yml up -d --force-recreate"

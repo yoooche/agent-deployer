@@ -105,13 +105,19 @@ jobs:
           GCP_REGION: ${{ vars.GCP_REGION }}
         run: |
           ssh louis-agent@$VM_IP "set -e
-            sudo apt-get update -qq && sudo apt-get install -y docker.io docker-compose-plugin
+            sudo apt-get update -qq && sudo apt-get install -y docker.io
             sudo usermod -aG docker louis-agent 2>/dev/null || true
             mkdir -p ~/.openclaw ~/.openclaw/workspace
-            gcloud auth configure-docker $GCP_REGION-docker.pkg.dev --quiet
-            DOCKER=\$(which docker || echo /usr/bin/docker)
-            \$DOCKER pull $REGISTRY_URL/openclaw:latest
-            export OPENCLAW_IMAGE=$REGISTRY_URL/openclaw:latest
-            export OPENCLAW_GATEWAY_TOKEN=$OPENCLAW_GATEWAY_TOKEN
-            export OPENCLAW_GATEWAY_BIND=lan
-            \$DOCKER compose -f ~/docker-compose.yml up -d --force-recreate"
+            sudo gcloud auth configure-docker $GCP_REGION-docker.pkg.dev --quiet
+            sudo docker pull $REGISTRY_URL/openclaw:latest
+            sudo docker rm -f openclaw-gateway 2>/dev/null || true
+            sudo docker run -d --name openclaw-gateway --restart unless-stopped \
+              -p 127.0.0.1:18789:18789 \
+              -v /home/louis-agent/.openclaw:/home/node/.openclaw \
+              -v /home/louis-agent/.openclaw/workspace:/home/node/.openclaw/workspace \
+              -e NODE_ENV=production \
+              -e OPENCLAW_GATEWAY_TOKEN=$OPENCLAW_GATEWAY_TOKEN \
+              -e OPENCLAW_GATEWAY_BIND=lan \
+              -e OPENCLAW_GATEWAY_PORT=18789 \
+              -e TERM=xterm-256color \
+              $REGISTRY_URL/openclaw:latest"

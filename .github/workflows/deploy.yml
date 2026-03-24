@@ -107,6 +107,7 @@ jobs:
           ssh louis-agent@$VM_IP << EOF
             set -e
             mkdir -p ~/.openclaw ~/.openclaw/workspace
+            sudo apt-get update -qq && sudo apt-get install -y -qq docker-compose-plugin 2>/dev/null || true
             gcloud auth configure-docker $GCP_REGION-docker.pkg.dev --quiet
             docker pull $REGISTRY_URL/openclaw:latest
             export OPENCLAW_IMAGE=$REGISTRY_URL/openclaw:latest

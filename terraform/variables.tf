@@ -38,3 +38,9 @@ variable "ssh_pub_key" {
   description = "SSH Public Key for VM access"
   type = string
 }
+
+variable "ssh_source_ranges" {
+  description = "CIDRs allowed to SSH to the VM (tighten to your home IP for production)"
+  type        = list(string)
+  default     = ["0.0.0.0/0"]
+}

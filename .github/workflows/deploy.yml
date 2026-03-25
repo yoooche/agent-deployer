@@ -15,8 +15,23 @@ env:
   TF_VAR_ssh_pub_key: ${{ secrets.SSH_PUB_KEY }}
 
 jobs:
-  # job 1: Terraform
+  # Detect whether Terraform config changed (skip apply on app-only pushes).
+  paths-filter:
+    runs-on: ubuntu-latest
+    outputs:
+      terraform: ${{ steps.filter.outputs.terraform }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            terraform:
+              - 'terraform/**'
+
   terraform:
+    needs: paths-filter
+    if: needs.paths-filter.outputs.terraform == 'true' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     outputs:
       vm_external_ip: ${{ steps.outputs.outputs.vm_external_ip }}
@@ -30,7 +45,7 @@ jobs:
           credentials_json: ${{ secrets.GCP_SA_KEY }}
 
       - uses: hashicorp/setup-terraform@v4
-        with: 
+        with:
           terraform_wrapper: false
 
       - name: Terraform init
@@ -48,9 +63,39 @@ jobs:
           echo "artifact_registry_url=$(terraform output -raw artifact_registry_url)" >> $GITHUB_OUTPUT
         working-directory: terraform
 
-  # job 2: Build and push Docker image
+  # Resolve VM IP + registry URL when Terraform job was skipped (docker-only deploy).
+  resolve-infra:
+    needs: [paths-filter, terraform]
+    if: always()
+    runs-on: ubuntu-latest
+    outputs:
+      vm_external_ip: ${{ steps.resolve.outputs.vm_external_ip }}
+      artifact_registry_url: ${{ steps.resolve.outputs.artifact_registry_url }}
+
+    steps:
+      - uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - uses: google-github-actions/setup-gcloud@v2
+
+      - name: Resolve IP and registry URL
+        id: resolve
+        run: |
+          if [ "${{ needs.terraform.result }}" = "success" ]; then
+            echo "vm_external_ip=${{ needs.terraform.outputs.vm_external_ip }}" >> $GITHUB_OUTPUT
+            echo "artifact_registry_url=${{ needs.terraform.outputs.artifact_registry_url }}" >> $GITHUB_OUTPUT
+          else
+            IP=$(gcloud compute instances describe "${{ vars.VM_NAME }}" \
+              --zone="${{ vars.GCP_ZONE }}" \
+              --project="${{ vars.GCP_PROJECT_ID }}" \
+              --format='value(networkInterfaces[0].accessConfigs[0].natIp)')
+            echo "vm_external_ip=$IP" >> $GITHUB_OUTPUT
+            echo "artifact_registry_url=${{ vars.GCP_REGION }}-docker.pkg.dev/${{ vars.GCP_PROJECT_ID }}/${{ vars.ARTIFACT_NAME }}" >> $GITHUB_OUTPUT
+          fi
+
   build-push-image:
-    needs: terraform
+    needs: [resolve-infra]
     runs-on: ubuntu-latest
 
     steps:
@@ -68,18 +113,17 @@ jobs:
       - name: Build Image
         run: |
           docker build \
-            -t ${{ needs.terraform.outputs.artifact_registry_url }}/openclaw:latest \
-            -t ${{ needs.terraform.outputs.artifact_registry_url }}/openclaw:${{ github.sha }} \
+            -t ${{ needs.resolve-infra.outputs.artifact_registry_url }}/openclaw:latest \
+            -t ${{ needs.resolve-infra.outputs.artifact_registry_url }}/openclaw:${{ github.sha }} \
             ./docker
 
       - name: Push Image
         run: |
-          docker push ${{ needs.terraform.outputs.artifact_registry_url }}/openclaw:latest
-          docker push ${{ needs.terraform.outputs.artifact_registry_url }}/openclaw:${{ github.sha }}
+          docker push ${{ needs.resolve-infra.outputs.artifact_registry_url }}/openclaw:latest
+          docker push ${{ needs.resolve-infra.outputs.artifact_registry_url }}/openclaw:${{ github.sha }}
 
-  # job 3: Deploy to VM
   deploy-to-vm:
-    needs: [terraform, build-push-image]
+    needs: [resolve-infra, build-push-image]
     runs-on: ubuntu-latest
 
     steps:
@@ -90,17 +134,17 @@ jobs:
           mkdir -p ~/.ssh
           echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
           chmod 600 ~/.ssh/id_rsa
-          ssh-keyscan -H ${{ needs.terraform.outputs.vm_external_ip }} >> ~/.ssh/known_hosts
+          ssh-keyscan -H ${{ needs.resolve-infra.outputs.vm_external_ip }} >> ~/.ssh/known_hosts
 
       - name: Copy docker-compose.yml to VM
         run: |
           scp ./docker/docker-compose.yml \
-            louis-agent@${{ needs.terraform.outputs.vm_external_ip }}:~/docker-compose.yml
+            louis-agent@${{ needs.resolve-infra.outputs.vm_external_ip }}:~/docker-compose.yml
 
       - name: Deploy
-        env: 
-          VM_IP: ${{ needs.terraform.outputs.vm_external_ip }}
-          REGISTRY_URL: ${{ needs.terraform.outputs.artifact_registry_url }}
+        env:
+          VM_IP: ${{ needs.resolve-infra.outputs.vm_external_ip }}
+          REGISTRY_URL: ${{ needs.resolve-infra.outputs.artifact_registry_url }}
           OPENCLAW_GATEWAY_TOKEN: ${{ secrets.OPENCLAW_GATEWAY_TOKEN }}
           GCP_REGION: ${{ vars.GCP_REGION }}
         run: |

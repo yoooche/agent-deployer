@@ -38,10 +38,33 @@ resource "google_project_iam_member" "ar_reader" {
   member = "serviceAccount:${google_service_account.vm_sa.email}"
 }
 
+# Regional static external IP — survives VM recreate; same address across applies.
+resource "google_compute_address" "vm_public" {
+  name   = "${var.vm_name}-ip"
+  region = var.region
+}
+
+# Explicit SSH ingress (fixes timeout when default-allow-ssh is missing or not applied).
+resource "google_compute_firewall" "allow_ssh" {
+  name    = "${var.vm_name}-allow-ssh"
+  network = "default"
+  project = var.project_id
+
+  allow {
+    protocol = "tcp"
+    ports    = ["22"]
+  }
+
+  source_ranges = var.ssh_source_ranges
+  target_tags   = ["openclaw-ssh"]
+}
+
 resource "google_compute_instance" "vm" {
   name = var.vm_name
   machine_type = var.vm_machine_type
   zone = var.zone
+
+  tags = ["openclaw-ssh"]
 
   boot_disk {
     initialize_params {
@@ -52,7 +75,9 @@ resource "google_compute_instance" "vm" {
 
   network_interface {
     network = "default"
-    access_config {} # This is for the public IP address
+    access_config {
+      nat_ip = google_compute_address.vm_public.address
+    }
   }
 
   service_account {

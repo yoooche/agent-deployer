@@ -129,6 +129,42 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - uses: google-github-actions/setup-gcloud@v2
+
+      - name: Ensure VM is running
+        run: |
+          STATUS=$(gcloud compute instances describe "${{ vars.VM_NAME }}" \
+            --zone="${{ vars.GCP_ZONE }}" \
+            --project="${{ vars.GCP_PROJECT_ID }}" \
+            --format='value(status)')
+          echo "VM status: $STATUS"
+
+          if [ "$STATUS" != "RUNNING" ]; then
+            gcloud compute instances start "${{ vars.VM_NAME }}" \
+              --zone="${{ vars.GCP_ZONE }}" \
+              --project="${{ vars.GCP_PROJECT_ID }}"
+          fi
+
+          for i in {1..30}; do
+            STATUS=$(gcloud compute instances describe "${{ vars.VM_NAME }}" \
+              --zone="${{ vars.GCP_ZONE }}" \
+              --project="${{ vars.GCP_PROJECT_ID }}" \
+              --format='value(status)')
+            if [ "$STATUS" = "RUNNING" ]; then
+              echo "VM is running"
+              exit 0
+            fi
+            echo "Waiting for VM to run... attempt $i/30 (status: $STATUS)"
+            sleep 5
+          done
+
+          echo "VM did not become RUNNING in time"
+          exit 1
+
       - name: Setup SSH
         run: |
           mkdir -p ~/.ssh

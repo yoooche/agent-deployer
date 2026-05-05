@@ -35,4 +35,4 @@ terraform plan
 terraform apply
 ```
 
-Use your GCP project ID (e.g. `openclaw-louis-agent-tfstate`).
+Use your GCP project ID (e.g. `your-agent-project-tfstate`).

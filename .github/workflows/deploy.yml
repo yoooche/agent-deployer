@@ -136,11 +136,6 @@ jobs:
           chmod 600 ~/.ssh/id_rsa
           ssh-keyscan -H ${{ needs.resolve-infra.outputs.vm_external_ip }} >> ~/.ssh/known_hosts
 
-      - name: Copy docker-compose.yml to VM
-        run: |
-          scp ./docker/docker-compose.yml \
-            louis-agent@${{ needs.resolve-infra.outputs.vm_external_ip }}:~/docker-compose.yml
-
       - name: Deploy
         env:
           VM_IP: ${{ needs.resolve-infra.outputs.vm_external_ip }}

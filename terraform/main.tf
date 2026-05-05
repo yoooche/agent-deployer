@@ -1,8 +1,8 @@
 terraform {
   required_providers {
     google = {
-        source = "hashicorp/google"
-        version = "~> 5.0"
+      source  = "hashicorp/google"
+      version = "~> 5.0"
     }
   }
 
@@ -15,27 +15,27 @@ terraform {
 
 provider "google" {
   project = var.project_id
-  region = var.region
+  region  = var.region
 }
 
 # Artifact Registry Repository
 resource "google_artifact_registry_repository" "repo" {
-  location = var.region
+  location      = var.region
   repository_id = var.artifact_name
-  format = "DOCKER"
+  format        = "DOCKER"
 }
 
 # Service Account
 resource "google_service_account" "vm_sa" {
-  account_id = "vm-deployer-sa"
+  account_id   = "vm-deployer-sa"
   display_name = "VM Deployer Service Account"
 }
 
 # The permission for service account to access artifact registry
 resource "google_project_iam_member" "ar_reader" {
   project = var.project_id
-  role = "roles/artifactregistry.reader"
-  member = "serviceAccount:${google_service_account.vm_sa.email}"
+  role    = "roles/artifactregistry.reader"
+  member  = "serviceAccount:${google_service_account.vm_sa.email}"
 }
 
 # Regional static external IP — survives VM recreate; same address across applies.
@@ -56,20 +56,20 @@ resource "google_compute_firewall" "allow_ssh" {
   }
 
   source_ranges = var.ssh_source_ranges
-  target_tags   = ["openclaw-ssh"]
+  target_tags   = ["agent-ssh"]
 }
 
 resource "google_compute_instance" "vm" {
-  name = var.vm_name
+  name         = var.vm_name
   machine_type = var.vm_machine_type
-  zone = var.zone
+  zone         = var.zone
 
-  tags = ["openclaw-ssh"]
+  tags = ["agent-ssh"]
 
   boot_disk {
     initialize_params {
       image = "debian-cloud/debian-12"
-      size = 20
+      size  = 20
     }
   }
 
@@ -81,7 +81,7 @@ resource "google_compute_instance" "vm" {
   }
 
   service_account {
-    email = google_service_account.vm_sa.email
+    email  = google_service_account.vm_sa.email
     scopes = ["cloud-platform"]
   }
 

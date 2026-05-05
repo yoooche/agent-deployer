@@ -35,7 +35,7 @@
 
 ## 本專案對照（Terraform）
 
-- 防火牆：`target_tags = ["agent-ssh"]`，VM 帶同一 tag；`ssh_source_ranges` 預設為 `0.0.0.0/0` 時，不應因「來源 CIDR」挡掉一般家裡 IP。
+- 防火牆：目前 concrete OpenClaw deployment 使用 `target_tags = ["openclaw-ssh"]`，VM 帶同一 tag；`ssh_source_ranges` 預設為 `0.0.0.0/0` 時，不應因「來源 CIDR」挡掉一般家裡 IP。未來抽象成多 agent spec 時，再一起改名，避免只改 VM 或 firewall 其中一邊。
 - metadata：`ssh-keys = "louis-agent:${var.ssh_pub_key}"` → 登入帳號為 **`louis-agent`**。
 
 ## 仍要繞過本機擋 22 時

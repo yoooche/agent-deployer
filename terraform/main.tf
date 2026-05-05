@@ -56,7 +56,7 @@ resource "google_compute_firewall" "allow_ssh" {
   }
 
   source_ranges = var.ssh_source_ranges
-  target_tags   = ["agent-ssh"]
+  target_tags   = ["openclaw-ssh"]
 }
 
 resource "google_compute_instance" "vm" {
@@ -64,7 +64,7 @@ resource "google_compute_instance" "vm" {
   machine_type = var.vm_machine_type
   zone         = var.zone
 
-  tags = ["agent-ssh"]
+  tags = ["openclaw-ssh"]
 
   boot_disk {
     initialize_params {

@@ -134,7 +134,15 @@ jobs:
           mkdir -p ~/.ssh
           echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
           chmod 600 ~/.ssh/id_rsa
-          ssh-keyscan -H ${{ needs.resolve-infra.outputs.vm_external_ip }} >> ~/.ssh/known_hosts
+          for i in {1..30}; do
+            if ssh-keyscan -T 10 -H ${{ needs.resolve-infra.outputs.vm_external_ip }} >> ~/.ssh/known_hosts; then
+              exit 0
+            fi
+            echo "Waiting for SSH to become reachable... attempt $i/30"
+            sleep 5
+          done
+          echo "SSH did not become reachable in time"
+          exit 1
 
       - name: Deploy
         env:
@@ -143,7 +151,7 @@ jobs:
           OPENCLAW_GATEWAY_TOKEN: ${{ secrets.OPENCLAW_GATEWAY_TOKEN }}
           GCP_REGION: ${{ vars.GCP_REGION }}
         run: |
-          ssh louis-agent@$VM_IP "set -e
+          ssh -o ConnectTimeout=30 -o ServerAliveInterval=15 -o ServerAliveCountMax=4 louis-agent@$VM_IP "set -e
             sudo apt-get update -qq && sudo apt-get install -y docker.io
             sudo usermod -aG docker louis-agent 2>/dev/null || true
             mkdir -p ~/.openclaw ~/.openclaw/workspace

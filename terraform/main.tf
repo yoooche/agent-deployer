@@ -1,61 +1,87 @@
 terraform {
   required_providers {
     google = {
-        source = "hashicorp/google"
-        version = "~> 5.0"
+      source  = "hashicorp/google"
+      version = "~> 5.0"
     }
   }
 
   backend "gcs" {
-    bucket = "openclaw-tfstate"
+    # Bucket name passed at init: -backend-config="bucket=${project_id}-tfstate"
+    # Must match the bucket created by bootstrap
     prefix = "terraform/state"
   }
 }
 
 provider "google" {
   project = var.project_id
-  region = var.region
+  region  = var.region
 }
 
 # Artifact Registry Repository
 resource "google_artifact_registry_repository" "repo" {
-  location = var.region
+  location      = var.region
   repository_id = var.artifact_name
-  format = "DOCKER"
+  format        = "DOCKER"
 }
 
 # Service Account
 resource "google_service_account" "vm_sa" {
-  account_id = "vm-deployer-sa"
+  account_id   = "vm-deployer-sa"
   display_name = "VM Deployer Service Account"
 }
 
 # The permission for service account to access artifact registry
 resource "google_project_iam_member" "ar_reader" {
   project = var.project_id
-  role = "roles/artifactregistry.reader"
-  member = "serviceAccount:${google_service_account.vm_sa.email}"
+  role    = "roles/artifactregistry.reader"
+  member  = "serviceAccount:${google_service_account.vm_sa.email}"
+}
+
+# Regional static external IP — survives VM recreate; same address across applies.
+resource "google_compute_address" "vm_public" {
+  name   = "${var.vm_name}-ip"
+  region = var.region
+}
+
+# Explicit SSH ingress (fixes timeout when default-allow-ssh is missing or not applied).
+resource "google_compute_firewall" "allow_ssh" {
+  name    = "${var.vm_name}-allow-ssh"
+  network = "default"
+  project = var.project_id
+
+  allow {
+    protocol = "tcp"
+    ports    = ["22"]
+  }
+
+  source_ranges = var.ssh_source_ranges
+  target_tags   = ["openclaw-ssh"]
 }
 
 resource "google_compute_instance" "vm" {
-  name = var.vm_name
+  name         = var.vm_name
   machine_type = var.vm_machine_type
-  zone = var.zone
+  zone         = var.zone
+
+  tags = ["openclaw-ssh"]
 
   boot_disk {
     initialize_params {
       image = "debian-cloud/debian-12"
-      size = 20
+      size  = 20
     }
   }
 
   network_interface {
     network = "default"
-    access_config {} # This is for the public IP address
+    access_config {
+      nat_ip = google_compute_address.vm_public.address
+    }
   }
 
   service_account {
-    email = google_service_account.vm_sa.email
+    email  = google_service_account.vm_sa.email
     scopes = ["cloud-platform"]
   }
 

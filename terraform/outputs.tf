@@ -1,6 +1,6 @@
 output "vm_external_ip" {
-  description = "External IP of the GCE VM"
-  value       = google_compute_instance.vm.network_interface[0].access_config[0].nat_ip
+  description = "Static external IP (reserved address bound to the VM)"
+  value       = google_compute_address.vm_public.address
 }
 
 output "artifact_registry_url" {

@@ -12,6 +12,7 @@ docs/
 ├── costs.md              # cost drivers and MVP/production patterns
 ├── security.md           # hosted-agent security posture
 ├── operations.md         # deployment and recovery checklist
+├── kumi-mvp-architecture.md # Kumi family-ops MVP boundaries and first loop
 ├── examples/
 │   ├── openclaw.md       # current runtime example
 │   └── hermes.md         # planned runtime example
@@ -38,7 +39,8 @@ docs/
 1. Read [architecture.md](architecture.md) to understand what belongs in this repo.
 2. Read [agent-spec.md](agent-spec.md) before adding a new agent runtime.
 3. Use [operations.md](operations.md) when setting up or debugging a deployment.
-4. Use [examples/openclaw.md](examples/openclaw.md) and [examples/hermes.md](examples/hermes.md) as runtime-specific references.
+4. Read [kumi-mvp-architecture.md](kumi-mvp-architecture.md) before changing Kumi service boundaries or renaming infrastructure.
+5. Use [examples/openclaw.md](examples/openclaw.md) and [examples/hermes.md](examples/hermes.md) as runtime-specific references.
 
 ## 快速對照：常見錯誤與對應文件
 
